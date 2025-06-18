@@ -4,18 +4,15 @@ import datetime
 import pytz
 import tzlocal
 import requests
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Log
 logging.basicConfig(level=logging.INFO)
 
-# Variáveis de ambiente
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
 chat_ids = set()
-bot: Bot = None
 
 def gerar_mensagem_gemini():
     headers = {"Content-Type": "application/json"}
@@ -30,7 +27,6 @@ def gerar_mensagem_gemini():
             }
         ]
     }
-
     try:
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}",
@@ -44,9 +40,10 @@ def gerar_mensagem_gemini():
 
 async def job_diario(context: ContextTypes.DEFAULT_TYPE):
     logging.info("Executando job diário...")
+    app = context.application
     for cid in chat_ids:
         mensagem = gerar_mensagem_gemini()
-        await bot.send_message(chat_id=cid, text=f"🤖 Bot do Bom Dia diz:\n{mensagem}")
+        await app.bot.send_message(chat_id=cid, text=f"🤖 Bot do Bom Dia diz:\n{mensagem}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
@@ -65,22 +62,28 @@ async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Você não estava registrado.")
 
 async def main():
-    global bot
     tzlocal.get_localzone = lambda: pytz.timezone("America/Sao_Paulo")
 
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    bot = app.bot
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stop", stop))
-
-    # Para testes, envie mensagem 1 minuto após início
+    from datetime import time
     from datetime import timedelta
-    app.job_queue.run_once(job_diario, when=timedelta(minutes=1))
+    app.job_queue.run_daily(
+        job_diario,
+        time=time(hour=6, minute=0, tzinfo=pytz.timezone("America/Sao_Paulo"))
+    )
 
     logging.info("Bot iniciado!")
     await app.run_polling()
 
 if __name__ == "__main__":
     import asyncio
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+
+        import nest_asyncio
+        nest_asyncio.apply()
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main())
