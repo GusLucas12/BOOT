@@ -1,0 +1,4 @@
+python-telegram-bot==20.7
+requests
+pytz
+tzlocal<3.0
