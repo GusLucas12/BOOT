@@ -11,8 +11,8 @@ from telegram.ext import Updater, CommandHandler, CallbackContext
 logging.basicConfig(level=logging.INFO)
 
 # Variáveis de ambiente
-TELEGRAM_TOKEN = "8141440662:AAENDWqOYC4hVdsOmcDNijLxK8ygxeHfvYY"
-GEMINI_API_KEY = "AIzaSyDi-1gW0dmaSJmBxqCr4c42a6qDJN6g7jE"
+TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 
 chat_ids = set()
 bot: Bot = None
