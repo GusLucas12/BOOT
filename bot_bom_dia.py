@@ -4,15 +4,18 @@ import datetime
 import pytz
 import tzlocal
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, Bot
+from telegram.ext import Updater, CommandHandler, CallbackContext
 
+# Log
 logging.basicConfig(level=logging.INFO)
 
-TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+# Variáveis de ambiente
+TELEGRAM_TOKEN = "8141440662:AAENDWqOYC4hVdsOmcDNijLxK8ygxeHfvYY"
+GEMINI_API_KEY = "AIzaSyDi-1gW0dmaSJmBxqCr4c42a6qDJN6g7jE"
 
 chat_ids = set()
+bot: Bot = None
 
 def gerar_mensagem_gemini():
     headers = {"Content-Type": "application/json"}
@@ -27,6 +30,7 @@ def gerar_mensagem_gemini():
             }
         ]
     }
+
     try:
         response = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}",
@@ -38,52 +42,47 @@ def gerar_mensagem_gemini():
         logging.error(f"Erro ao chamar Gemini API: {e}")
         return "Bom dia! Que seu dia seja incrível! 😉"
 
-async def job_diario(context: ContextTypes.DEFAULT_TYPE):
+def job_diario(context: CallbackContext):
     logging.info("Executando job diário...")
-    app = context.application
     for cid in chat_ids:
         mensagem = gerar_mensagem_gemini()
-        await app.bot.send_message(chat_id=cid, text=f"🤖 Bot do Bom Dia diz:\n{mensagem}")
+        context.bot.send_message(chat_id=cid, text=f"🤖 Bot do Bom Dia diz:\n{mensagem}")
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     cid = update.effective_chat.id
     if cid not in chat_ids:
         chat_ids.add(cid)
-        await update.message.reply_text("Você foi registrado para receber mensagens diárias às 06:00. 🕕")
+        update.message.reply_text("Você foi registrado para receber mensagens diárias às 06:00. 🕕")
     else:
-        await update.message.reply_text("Você já está registrado!")
+        update.message.reply_text("Você já está registrado!")
 
-async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def stop(update: Update, context: CallbackContext):
     cid = update.effective_chat.id
     if cid in chat_ids:
         chat_ids.remove(cid)
-        await update.message.reply_text("Você foi removido da lista de envio diário. 😢")
+        update.message.reply_text("Você foi removido da lista de envio diário. 😢")
     else:
-        await update.message.reply_text("Você não estava registrado.")
+        update.message.reply_text("Você não estava registrado.")
 
-async def main():
+def main():
+    global bot
     tzlocal.get_localzone = lambda: pytz.timezone("America/Sao_Paulo")
 
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("stop", stop))
-    from datetime import time
-    from datetime import timedelta
-    app.job_queue.run_daily(
-        job_diario,
-        time=time(hour=6, minute=0, tzinfo=pytz.timezone("America/Sao_Paulo"))
-    )
+    updater = Updater(token=TELEGRAM_TOKEN, use_context=True)
+    bot = updater.bot
+    dispatcher = updater.dispatcher
 
-    logging.info("Bot iniciado!")
-    await app.run_polling()
+    dispatcher.add_handler(CommandHandler("start", start))
+    dispatcher.add_handler(CommandHandler("stop", stop))
+
+    # Agenda a tarefa diária
+    job_queue = updater.job_queue
+    sao_paulo = pytz.timezone("America/Sao_Paulo")
+    job_queue.run_daily(job_diario, time=datetime.time(6, 0, tzinfo=sao_paulo))
+
+    logging.info("Bot iniciado.")
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
-    import asyncio
-    try:
-        asyncio.run(main())
-    except RuntimeError as e:
-
-        import nest_asyncio
-        nest_asyncio.apply()
-        loop = asyncio.get_event_loop()
-        loop.run_until_complete(main())
+    main()
